@@ -18,6 +18,8 @@
 
 #define WC_BATCH (10)
 #define MAX_INLINE_DATA (256)
+#define MAX_TX_DEPTH (2048)
+#define MAX_RX_DEPTH (2048)
 
 enum {
     PINGPONG_RECV_WRID = 1,
@@ -662,6 +664,10 @@ int main(int argc, char *argv[])
 
         case 'r':
             rx_depth = strtol(optarg, NULL, 0);
+            if (rx_depth > MAX_RX_DEPTH) {
+                fprintf(stderr, "rx_depth too high, setting to MAX_RX_DEPTH %d\n", MAX_RX_DEPTH);
+                rx_depth = MAX_RX_DEPTH;
+            }
             break;
 
         case 'n':

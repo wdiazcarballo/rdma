@@ -16,13 +16,14 @@ HCA="-d mlx5_0 -i 1"
 BINDS="numactl --cpunodebind=2 "
 BINDC="numactl --cpunodebind=2 "
 
+
+# Start the client on the second node
+srun --nodes=1 --ntasks=1 --nodelist=$CLIENT_NODE ./client $SERVER_NODE
+
 # Start the server on the first node
 srun --nodes=1 --ntasks=1 --nodelist=$SERVER_NODE ./server &
 
 # Give the server a moment to start
 sleep 5
-
-# Start the client on the second node
-srun --nodes=1 --ntasks=1 --nodelist=$CLIENT_NODE ./client $SERVER_NODE
 
 wait

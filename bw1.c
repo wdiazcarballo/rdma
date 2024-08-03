@@ -58,7 +58,6 @@ enum {
 
 static int page_size;
 
-
 struct pingpong_context {
     struct ibv_context        *context;
     struct ibv_comp_channel   *channel;
@@ -338,7 +337,6 @@ static struct pingpong_dest *pp_server_exch_dest(struct pingpong_context *ctx,
         rem_dest = NULL;
         goto out;
     }
-
 
     gid_to_wire_gid(&my_dest->gid, gid);
     sprintf(msg, "%04x:%06x:%06x:%s", my_dest->lid, my_dest->qpn, my_dest->psn, gid);
@@ -764,7 +762,6 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-
     if (pp_get_port_info(ctx->context, ib_port, &ctx->portinfo)) {
         fprintf(stderr, "Couldn't get port info\n");
         return 1;
@@ -789,7 +786,6 @@ int main(int argc, char *argv[])
     inet_ntop(AF_INET6, &my_dest.gid, gid, sizeof gid);
     printf("  local address:  LID 0x%04x, QPN 0x%06x, PSN 0x%06x, GID %s\n",
            my_dest.lid, my_dest.qpn, my_dest.psn, gid);
-
 
     if (servername)
         rem_dest = pp_client_exch_dest(servername, port, &my_dest);

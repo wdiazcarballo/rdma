@@ -403,8 +403,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
     }
 
     ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE |
-                                             IBV_ACCESS_REMOTE_READ |
-                                             IBV_ACCESS_REMOTE_WRITE);
+                                             IBV_ACCESS_REMOTE_ATOMIC);
     if (!ctx->mr) {
         fprintf(stderr, "Couldn't register MR\n");
         return NULL;

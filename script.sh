@@ -1,3 +1,5 @@
+#!/bin/bash
+
 NODELIST=\$(scontrol show hostnames \$SLURM_JOB_NODELIST)
 NODES=($NODELIST)
 

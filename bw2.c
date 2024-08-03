@@ -545,7 +545,8 @@ static int pp_post_send(struct pingpong_context *ctx, int opcode)
 
 int pp_wait_completions(struct pingpong_context *ctx, int iters)
 {
-    int rcnt = 0, scnt = 0, wc_cnt = 0;
+    int rcnt = 0, scnt = 0;
+
     while (rcnt + scnt < iters) {
         struct ibv_wc wc[WC_BATCH];
         int ne, i;
@@ -561,10 +562,14 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
 
         for (i = 0; i < ne; ++i) {
             if (wc[i].status != IBV_WC_SUCCESS) {
-                fprintf(stderr, "Failed status %s (%d) for wr_id %d\n",
-                        ibv_wc_status_str(wc[i].status),
-                        wc[i].status, (int) wc[i].wr_id);
-                return 1;
+                if (wc[i].status == IBV_WC_WR_FLUSH_ERR) {
+                    fprintf(stderr, "Work Request Flushed Error for wr_id %d\n", (int) wc[i].wr_id);
+                } else {
+                    fprintf(stderr, "Failed status %s (%d) for wr_id %d\n",
+                            ibv_wc_status_str(wc[i].status),
+                            wc[i].status, (int) wc[i].wr_id);
+                    return 1;
+                }
             }
 
             switch ((int) wc[i].wr_id) {
@@ -576,9 +581,7 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
                 if (--ctx->routs <= 10) {
                     ctx->routs += pp_post_recv(ctx, ctx->rx_depth - ctx->routs);
                     if (ctx->routs < ctx->rx_depth) {
-                        fprintf(stderr,
-                                "Couldn't post receive (%d)\n",
-                                ctx->routs);
+                        fprintf(stderr, "Couldn't post receive (%d)\n", ctx->routs);
                         return 1;
                     }
                 }
@@ -590,11 +593,9 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
                 break;
 
             default:
-                fprintf(stderr, "Completion for unknown wr_id %d\n",
-                        (int) wc[i].wr_id);
+                fprintf(stderr, "Completion for unknown wr_id %d\n", (int) wc[i].wr_id);
                 return 1;
             }
-            wc_cnt++;
         }
     }
     return 0;
@@ -657,11 +658,10 @@ int main(int argc, char *argv[])
                 { .name = "sl",       .has_arg = 1, .val = 'l' },
                 { .name = "events",   .has_arg = 0, .val = 'e' },
                 { .name = "gid-idx",  .has_arg = 1, .val = 'g' },
-                { .name = "inline",   .has_arg = 0, .val = 'I' },
                 { 0 }
         };
 
-        c = getopt_long(argc, argv, "p:d:i:s:m:r:n:l:eg:I", long_options, NULL);
+        c = getopt_long(argc, argv, "p:d:i:s:m:r:n:l:eg:", long_options, NULL);
         if (c == -1)
             break;
 
@@ -716,10 +716,6 @@ int main(int argc, char *argv[])
 
         case 'g':
             gidx = strtol(optarg, NULL, 0);
-            break;
-
-        case 'I':
-            ++use_inline;
             break;
 
         default:

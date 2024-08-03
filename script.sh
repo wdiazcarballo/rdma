@@ -1,6 +1,9 @@
+NODELIST=\$(scontrol show hostnames \$SLURM_JOB_NODELIST)
+NODES=($NODELIST)
+
 TAG=$(date +%Y%m%d-%H%M%S)
-DEST=helios021
-SRC=helios020
+DEST=\${NODES[0]}
+SRC=\${NODES[1]}
  
 HCA="-d mlx5_0 -i 1"
 BINDS="numactl --cpunodebind=2 "

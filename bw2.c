@@ -601,6 +601,7 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
     return 0;
 }
 
+
 static void usage(const char *argv0)
 {
     printf("Usage:\n");

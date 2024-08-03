@@ -50,7 +50,7 @@
 #include <infiniband/verbs.h>
 
 #define WC_BATCH (10)
-#define MAX_INLINE_DATA (400)
+#define MAX_INLINE_DATA (256)
 
 enum {
     PINGPONG_RECV_WRID = 1,
@@ -401,7 +401,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
         return NULL;
     }
 
-    ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE);
+    ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
     if (!ctx->mr) {
         fprintf(stderr, "Couldn't register MR\n");
         return NULL;
@@ -813,12 +813,19 @@ int main(int argc, char *argv[])
         int i;
         for (i = 0; i < iters; i++) {
             if ((i != 0) && (i % tx_depth == 0)) {
-                pp_wait_completions(ctx, tx_depth);
+                if (pp_wait_completions(ctx, tx_depth)) {
+                    fprintf(stderr, "Client failed to wait for completions\n");
+                    return 1;
+                }
             }
             if (pp_post_send(ctx, IBV_WR_RDMA_WRITE)) {
                 fprintf(stderr, "Client couldn't post RDMA WRITE\n");
                 return 1;
             }
+        }
+        if (pp_wait_completions(ctx, iters % tx_depth)) {
+            fprintf(stderr, "Client failed to wait for completions\n");
+            return 1;
         }
         printf("Client Done.\n");
     } else {

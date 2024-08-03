@@ -50,6 +50,7 @@
 #include <infiniband/verbs.h>
 
 #define WC_BATCH (10)
+#define MAX_INLINE_DATA (400)
 
 enum {
     PINGPONG_RECV_WRID = 1,
@@ -421,7 +422,8 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
                         .max_send_wr  = tx_depth,
                         .max_recv_wr  = rx_depth,
                         .max_send_sge = 1,
-                        .max_recv_sge = 1
+                        .max_recv_sge = 1,
+                        .max_inline_data = MAX_INLINE_DATA
                 },
                 .qp_type = IBV_QPT_RC
         };
@@ -535,6 +537,10 @@ static int pp_post_send(struct pingpong_context *ctx, int opcode)
             .next       = NULL
     };
 
+    if (ctx->size <= MAX_INLINE_DATA) {
+        wr.send_flags |= IBV_SEND_INLINE;
+    }
+
     return ibv_post_send(ctx->qp, &wr, &bad_wr);
 }
 
@@ -598,7 +604,7 @@ static void usage(const char *argv0)
     printf("  %s <host>     connect to server at <host>\n", argv0);
     printf("\n");
     printf("Options:\n");
-    printf("  -p, --port=<port>      listen on/connect to port <port> (default 18515)\n");
+    printf("  -p, --port=<port>      listen on/connect to port <port> (default 12345)\n");
     printf("  -d, --ib-dev=<dev>     use IB device <dev> (default first device found)\n");
     printf("  -i, --ib-port=<port>   use port <port> of IB device (default 1)\n");
     printf("  -s, --size=<size>      size of message to exchange (default 4096)\n");
@@ -626,7 +632,7 @@ int main(int argc, char *argv[])
     int                      tx_depth = 100;
     int                      iters = 1000;
     int                      use_event = 0;
-    int                      size = 1;
+    int                      size = 4096;
     int                      sl = 0;
     int                      gidx = -1;
     char                     gid[INET6_ADDRSTRLEN];

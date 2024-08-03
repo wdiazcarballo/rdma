@@ -7,9 +7,6 @@
 #SBATCH --output=bw_test_%j.log
 #SBATCH --chdir=/global/home/users/rdmaworkshop08/wdc/rdma
 
-# Load necessary modules
-module load infiniband
-
 # Get the hostnames
 NODELIST=($(scontrol show hostnames $SLURM_JOB_NODELIST))
 SERVER_NODE=${NODELIST[0]}

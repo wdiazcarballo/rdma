@@ -4,11 +4,10 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --partition=helios
 #SBATCH --output=bw_test_%j.log
+#SBATCH --chdir=/global/home/users/rdmaworkshop08/wdc/rdma
 
 # Load necessary modules
-module load gcc
-module load openmpi
-module load infiniband
+module load gcc hpcx
 
 # Get the list of nodes
 NODELIST=($(scontrol show hostnames $SLURM_JOB_NODELIST))

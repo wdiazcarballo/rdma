@@ -169,10 +169,10 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn,
     }
 
     attr.qp_state       = IBV_QPS_RTS;
-    attr.timeout        = 14;
+    attr.timeout        = 20;  // Increased from 14 to 20
     attr.retry_cnt      = 7;
     attr.rnr_retry      = 7;
-    attr.sq_psn     = my_psn;
+    attr.sq_psn         = my_psn;
     attr.max_rd_atomic  = 1;
     if (ibv_modify_qp(ctx->qp, &attr,
             IBV_QP_STATE              |
@@ -356,8 +356,6 @@ static struct pingpong_dest *pp_server_exch_dest(struct pingpong_context *ctx,
     return rem_dest;
 }
 
-#include <sys/param.h>
-
 static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
                                             int rx_depth, int tx_depth, int port,
                                             int use_event, int is_server)
@@ -403,7 +401,8 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
     }
 
     ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE |
-                                             IBV_ACCESS_REMOTE_ATOMIC);
+                                                IBV_ACCESS_REMOTE_READ |
+                                                IBV_ACCESS_REMOTE_WRITE);
     if (!ctx->mr) {
         fprintf(stderr, "Couldn't register MR\n");
         return NULL;
@@ -424,8 +423,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
                         .max_send_wr  = tx_depth,
                         .max_recv_wr  = rx_depth,
                         .max_send_sge = 1,
-                        .max_recv_sge = 1,
-                        .max_inline_data = use_inline ? 128 : 0 // Use inline data if applicable
+                        .max_recv_sge = 1
                 },
                 .qp_type = IBV_QPT_RC
         };
@@ -443,7 +441,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
                 .pkey_index      = 0,
                 .port_num        = port,
                 .qp_access_flags = IBV_ACCESS_REMOTE_READ |
-                                   IBV_ACCESS_REMOTE_WRITE
+                IBV_ACCESS_REMOTE_WRITE
         };
 
         if (ibv_modify_qp(ctx->qp, &attr,
@@ -619,7 +617,7 @@ static void usage(const char *argv0)
     printf("  -l, --sl=<sl>          service level value\n");
     printf("  -e, --events           sleep on CQ events (default poll)\n");
     printf("  -g, --gid-idx=<gid index> local port gid index\n");
-    printf("  -I, --inline           use inline data send\n");
+    printf("  -I, --inline           use inline data when sending\n");
 }
 
 int main(int argc, char *argv[])
@@ -631,17 +629,17 @@ int main(int argc, char *argv[])
     struct pingpong_dest    *rem_dest;
     char                    *ib_devname = NULL;
     char                    *servername = NULL;
-    int                      port = 12345;
+    int                      port = 18515;
     int                      ib_port = 1;
-    enum ibv_mtu             mtu = IBV_MTU_2048;
-    int                      rx_depth = 100;
-    int                      tx_depth = 100;
+    enum ibv_mtu             mtu = IBV_MTU_1024;
+    int                      rx_depth = 500;
+    int                      tx_depth = 500;
     int                      iters = 1000;
     int                      use_event = 0;
     int                      size = 4096;
     int                      sl = 0;
     int                      gidx = -1;
-    char                     gid[INET6_ADDRSTRLEN];
+    char                     gid[33];
 
     srand48(getpid() * time(NULL));
 
@@ -721,7 +719,7 @@ int main(int argc, char *argv[])
             break;
 
         case 'I':
-            use_inline = 1;
+            ++use_inline;
             break;
 
         default:
@@ -767,10 +765,13 @@ int main(int argc, char *argv[])
     if (!ctx)
         return 1;
 
-    ctx->routs = pp_post_recv(ctx, ctx->rx_depth);
-    if (ctx->routs < ctx->rx_depth) {
-        fprintf(stderr, "Couldn't post receive (%d)\n", ctx->routs);
-        return 1;
+    if (!servername) {
+        // Server
+        ctx->routs = pp_post_recv(ctx, ctx->rx_depth);
+        if (ctx->routs < ctx->rx_depth) {
+            fprintf(stderr, "Couldn't post receive (%d)\n", ctx->routs);
+            return 1;
+        }
     }
 
     if (use_event)
@@ -821,6 +822,7 @@ int main(int argc, char *argv[])
             return 1;
 
     if (servername) {
+        // Client
         int i;
         for (i = 0; i < iters; i++) {
             if ((i != 0) && (i % tx_depth == 0)) {
@@ -834,12 +836,20 @@ int main(int argc, char *argv[])
                 return 1;
             }
         }
+
+        // Ensure the final completions are waited on
+        if (pp_wait_completions(ctx, iters % tx_depth)) {
+            fprintf(stderr, "Client failed to wait for completions\n");
+            return 1;
+        }
         printf("Client Done.\n");
     } else {
+        // Server
         if (pp_post_send(ctx, IBV_WR_SEND)) {
             fprintf(stderr, "Server couldn't post send\n");
             return 1;
         }
+
         if (pp_wait_completions(ctx, iters)) {
             fprintf(stderr, "Server failed to wait for completions\n");
             return 1;

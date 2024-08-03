@@ -20,7 +20,7 @@ BINDC="numactl --cpunodebind=2 "
 srun --nodes=1 --ntasks=1 --nodelist=$SERVER_NODE ./server &
 
 # Give the server a moment to start
-sleep 10
+sleep 8
 
 # Start the client on the second node
 srun --nodes=1 --ntasks=1 --nodelist=$CLIENT_NODE ./client $SERVER_NODE

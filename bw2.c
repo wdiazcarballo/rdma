@@ -107,13 +107,13 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn, en
         attr.ah_attr.grh.sgid_index = sgid_idx;
     }
     if (ibv_modify_qp(ctx->qp, &attr,
-            IBV_QP_STATE              |
-            IBV_QP_AV                 |
-            IBV_QP_PATH_MTU           |
-            IBV_QP_DEST_QPN           |
-            IBV_QP_RQ_PSN             |
-            IBV_QP_MAX_DEST_RD_ATOMIC |
-            IBV_QP_MIN_RNR_TIMER)) {
+                      IBV_QP_STATE              |
+                      IBV_QP_AV                 |
+                      IBV_QP_PATH_MTU           |
+                      IBV_QP_DEST_QPN           |
+                      IBV_QP_RQ_PSN             |
+                      IBV_QP_MAX_DEST_RD_ATOMIC |
+                      IBV_QP_MIN_RNR_TIMER)) {
         fprintf(stderr, "Failed to modify QP to RTR\n");
         return 1;
     }
@@ -125,12 +125,12 @@ static int pp_connect_ctx(struct pingpong_context *ctx, int port, int my_psn, en
     attr.sq_psn         = my_psn;
     attr.max_rd_atomic  = 1;
     if (ibv_modify_qp(ctx->qp, &attr,
-            IBV_QP_STATE              |
-            IBV_QP_TIMEOUT            |
-            IBV_QP_RETRY_CNT          |
-            IBV_QP_RNR_RETRY          |
-            IBV_QP_SQ_PSN             |
-            IBV_QP_MAX_QP_RD_ATOMIC)) {
+                      IBV_QP_STATE              |
+                      IBV_QP_TIMEOUT            |
+                      IBV_QP_RETRY_CNT          |
+                      IBV_QP_RNR_RETRY          |
+                      IBV_QP_SQ_PSN             |
+                      IBV_QP_MAX_QP_RD_ATOMIC)) {
         fprintf(stderr, "Failed to modify QP to RTS\n");
         return 1;
     }
@@ -236,9 +236,7 @@ static struct pingpong_dest *pp_server_exch_dest(struct pingpong_context *ctx, i
         sockfd = socket(t->ai_family, t->ai_socktype, t->ai_protocol);
         if (sockfd >= 0) {
             n = 1;
-
             setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof n);
-
             if (!bind(sockfd, t->ai_addr, t->ai_addrlen))
                 break;
             close(sockfd);
@@ -322,8 +320,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
 
     ctx->context = ibv_open_device(ib_dev);
     if (!ctx->context) {
-        fprintf(stderr, "Couldn't get context for %s\n",
-                ibv_get_device_name(ib_dev));
+        fprintf(stderr, "Couldn't get context for %s\n", ibv_get_device_name(ib_dev));
         return NULL;
     }
 
@@ -342,55 +339,50 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
         return NULL;
     }
 
-    ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE);
+    ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
     if (!ctx->mr) {
         fprintf(stderr, "Couldn't register MR\n");
         return NULL;
     }
 
-    ctx->cq = ibv_create_cq(ctx->context, rx_depth + tx_depth, NULL,
-            ctx->channel, 0);
+    ctx->cq = ibv_create_cq(ctx->context, rx_depth + tx_depth, NULL, ctx->channel, 0);
     if (!ctx->cq) {
         fprintf(stderr, "Couldn't create CQ\n");
         return NULL;
     }
 
-    {
-        struct ibv_qp_init_attr attr = {
-            .send_cq = ctx->cq,
-            .recv_cq = ctx->cq,
-            .cap     = {
-                .max_send_wr  = tx_depth,
-                .max_recv_wr  = rx_depth,
-                .max_send_sge = 1,
-                .max_recv_sge = 1
-            },
-            .qp_type = IBV_QPT_RC
-        };
+    struct ibv_qp_init_attr attr = {
+        .send_cq = ctx->cq,
+        .recv_cq = ctx->cq,
+        .cap     = {
+            .max_send_wr  = tx_depth,
+            .max_recv_wr  = rx_depth,
+            .max_send_sge = 1,
+            .max_recv_sge = 1
+        },
+        .qp_type = IBV_QPT_RC
+    };
 
-        ctx->qp = ibv_create_qp(ctx->pd, &attr);
-        if (!ctx->qp)  {
-            fprintf(stderr, "Couldn't create QP\n");
-            return NULL;
-        }
+    ctx->qp = ibv_create_qp(ctx->pd, &attr);
+    if (!ctx->qp) {
+        fprintf(stderr, "Couldn't create QP\n");
+        return NULL;
     }
 
-    {
-        struct ibv_qp_attr attr = {
-            .qp_state        = IBV_QPS_INIT,
-            .pkey_index      = 0,
-            .port_num        = port,
-            .qp_access_flags = IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-        };
+    struct ibv_qp_attr qp_attr = {
+        .qp_state        = IBV_QPS_INIT,
+        .pkey_index      = 0,
+        .port_num        = port,
+        .qp_access_flags = IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+    };
 
-        if (ibv_modify_qp(ctx->qp, &attr,
-                IBV_QP_STATE              |
-                IBV_QP_PKEY_INDEX         |
-                IBV_QP_PORT               |
-                IBV_QP_ACCESS_FLAGS)) {
-            fprintf(stderr, "Failed to modify QP to INIT\n");
-            return NULL;
-        }
+    if (ibv_modify_qp(ctx->qp, &qp_attr,
+                      IBV_QP_STATE              |
+                      IBV_QP_PKEY_INDEX         |
+                      IBV_QP_PORT               |
+                      IBV_QP_ACCESS_FLAGS)) {
+        fprintf(stderr, "Failed to modify QP to INIT\n");
+        return NULL;
     }
 
     return ctx;
@@ -554,7 +546,7 @@ int main(int argc, char *argv[]) {
     int                      tx_depth = 100;
     int                      iters = 1000;
     int                      use_event = 0;
-    int                      size = 1;
+    int                      size = 4096; // default size
     int                      sl = 0;
     int                      gidx = -1;
     char                     gid[INET6_ADDRSTRLEN];

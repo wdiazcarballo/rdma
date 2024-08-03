@@ -1,4 +1,37 @@
 // file: bw2.c
+/*
+ * Copyright (c) 2005 Topspin Communications.  All rights reserved.
+ * Copyright (c) 2006 Cisco Systems.  All rights reserved.
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * OpenIB.org BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 #define _GNU_SOURCE
 #include <assert.h>
 #include <stdio.h>
@@ -17,16 +50,15 @@
 #include <infiniband/verbs.h>
 
 #define WC_BATCH (10)
-#define MAX_INLINE_DATA (256)
-#define MAX_TX_DEPTH (2048)
-#define MAX_RX_DEPTH (2048)
 
 enum {
     PINGPONG_RECV_WRID = 1,
     PINGPONG_SEND_WRID = 2,
+    PINGPONG_RDMA_WRID = 3,
 };
 
 static int page_size;
+static int use_inline = 0;
 
 struct pingpong_context {
     struct ibv_context        *context;
@@ -370,7 +402,9 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
         return NULL;
     }
 
-    ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ);
+    ctx->mr = ibv_reg_mr(ctx->pd, ctx->buf, size, IBV_ACCESS_LOCAL_WRITE |
+                                             IBV_ACCESS_REMOTE_READ |
+                                             IBV_ACCESS_REMOTE_WRITE);
     if (!ctx->mr) {
         fprintf(stderr, "Couldn't register MR\n");
         return NULL;
@@ -392,7 +426,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
                         .max_recv_wr  = rx_depth,
                         .max_send_sge = 1,
                         .max_recv_sge = 1,
-                        .max_inline_data = MAX_INLINE_DATA
+                        .max_inline_data = use_inline ? 128 : 0 // Use inline data if applicable
                 },
                 .qp_type = IBV_QPT_RC
         };
@@ -410,7 +444,7 @@ static struct pingpong_context *pp_init_ctx(struct ibv_device *ib_dev, int size,
                 .pkey_index      = 0,
                 .port_num        = port,
                 .qp_access_flags = IBV_ACCESS_REMOTE_READ |
-                IBV_ACCESS_REMOTE_WRITE
+                                   IBV_ACCESS_REMOTE_WRITE
         };
 
         if (ibv_modify_qp(ctx->qp, &attr,
@@ -498,7 +532,7 @@ static int pp_post_send(struct pingpong_context *ctx, int opcode)
     };
 
     struct ibv_send_wr *bad_wr, wr = {
-            .wr_id       = PINGPONG_SEND_WRID,
+            .wr_id       = opcode == IBV_WR_RDMA_WRITE ? PINGPONG_RDMA_WRID : PINGPONG_SEND_WRID,
             .sg_list    = &list,
             .num_sge    = 1,
             .opcode     = opcode,
@@ -506,16 +540,15 @@ static int pp_post_send(struct pingpong_context *ctx, int opcode)
             .next       = NULL
     };
 
-    if (ctx->size <= MAX_INLINE_DATA) {
+    if (use_inline && opcode == IBV_WR_SEND)
         wr.send_flags |= IBV_SEND_INLINE;
-    }
 
     return ibv_post_send(ctx->qp, &wr, &bad_wr);
 }
 
 int pp_wait_completions(struct pingpong_context *ctx, int iters)
 {
-    int rcnt = 0, scnt = 0;
+    int rcnt = 0, scnt = 0, wc_cnt = 0;
     while (rcnt + scnt < iters) {
         struct ibv_wc wc[WC_BATCH];
         int ne, i;
@@ -555,13 +588,17 @@ int pp_wait_completions(struct pingpong_context *ctx, int iters)
                 ++rcnt;
                 break;
 
+            case PINGPONG_RDMA_WRID:
+                ++scnt;
+                break;
+
             default:
                 fprintf(stderr, "Completion for unknown wr_id %d\n",
                         (int) wc[i].wr_id);
                 return 1;
             }
+            wc_cnt++;
         }
-
     }
     return 0;
 }
@@ -573,7 +610,7 @@ static void usage(const char *argv0)
     printf("  %s <host>     connect to server at <host>\n", argv0);
     printf("\n");
     printf("Options:\n");
-    printf("  -p, --port=<port>      listen on/connect to port <port> (default 12345)\n");
+    printf("  -p, --port=<port>      listen on/connect to port <port> (default 18515)\n");
     printf("  -d, --ib-dev=<dev>     use IB device <dev> (default first device found)\n");
     printf("  -i, --ib-port=<port>   use port <port> of IB device (default 1)\n");
     printf("  -s, --size=<size>      size of message to exchange (default 4096)\n");
@@ -583,6 +620,7 @@ static void usage(const char *argv0)
     printf("  -l, --sl=<sl>          service level value\n");
     printf("  -e, --events           sleep on CQ events (default poll)\n");
     printf("  -g, --gid-idx=<gid index> local port gid index\n");
+    printf("  -I, --inline           use inline data send\n");
 }
 
 int main(int argc, char *argv[])
@@ -622,10 +660,11 @@ int main(int argc, char *argv[])
                 { .name = "sl",       .has_arg = 1, .val = 'l' },
                 { .name = "events",   .has_arg = 0, .val = 'e' },
                 { .name = "gid-idx",  .has_arg = 1, .val = 'g' },
+                { .name = "inline",   .has_arg = 0, .val = 'I' },
                 { 0 }
         };
 
-        c = getopt_long(argc, argv, "p:d:i:s:m:r:n:l:eg:", long_options, NULL);
+        c = getopt_long(argc, argv, "p:d:i:s:m:r:n:l:eg:I", long_options, NULL);
         if (c == -1)
             break;
 
@@ -664,10 +703,6 @@ int main(int argc, char *argv[])
 
         case 'r':
             rx_depth = strtol(optarg, NULL, 0);
-            if (rx_depth > MAX_RX_DEPTH) {
-                fprintf(stderr, "rx_depth too high, setting to MAX_RX_DEPTH %d\n", MAX_RX_DEPTH);
-                rx_depth = MAX_RX_DEPTH;
-            }
             break;
 
         case 'n':
@@ -684,6 +719,10 @@ int main(int argc, char *argv[])
 
         case 'g':
             gidx = strtol(optarg, NULL, 0);
+            break;
+
+        case 'I':
+            use_inline = 1;
             break;
 
         default:
@@ -796,17 +835,16 @@ int main(int argc, char *argv[])
                 return 1;
             }
         }
-        if (pp_wait_completions(ctx, iters % tx_depth)) {
-            fprintf(stderr, "Client failed to wait for completions\n");
-            return 1;
-        }
         printf("Client Done.\n");
     } else {
         if (pp_post_send(ctx, IBV_WR_SEND)) {
-            fprintf(stderr, "Server couldn't post SEND\n");
+            fprintf(stderr, "Server couldn't post send\n");
             return 1;
         }
-        pp_wait_completions(ctx, iters);
+        if (pp_wait_completions(ctx, iters)) {
+            fprintf(stderr, "Server failed to wait for completions\n");
+            return 1;
+        }
         printf("Server Done.\n");
     }
 

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <infiniband/verbs.h>
+#include <arpa/inet.h>
 
 int main() {
     struct ibv_device **dev_list;

@@ -1,2 +1,2 @@
 # Ignore Slurm log files
-*.log
+#*.log

@@ -1,0 +1,9 @@
+Server couldn't post receive
+srun: error: helios017: task 0: Exited with exit code 1
+  local address:  LID 0x0050, QPN 0x005d74, PSN 0xbb7466, GID ::
+  remote address: LID 0x01ac, QPN 0x006237, PSN 0xa1b4ce, GID ::
+Failed status transport retry counter exceeded (12) for wr_id 2
+Client completion wait failed
+srun: error: helios018: task 0: Exited with exit code 1
+  local address:  LID 0x01ac, QPN 0x006237, PSN 0xa1b4ce, GID ::
+  remote address: LID 0x0050, QPN 0x005d74, PSN 0xbb7466, GID ::
